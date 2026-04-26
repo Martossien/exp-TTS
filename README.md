@@ -1,160 +1,115 @@
-# Voxtral-WebUI
-A Gradio-based browser interface for [Voxtral](https://huggingface.co/mistralai/Voxtral-Mini-3B-2507). You can use it as an Easy Subtitle Generator!
+# exp-TTS — Expérimental (fork de Voxtral-WebUI)
 
-![screen](./gradio-voxtral.png)
+> **⚠️ Ce projet est EXPÉRIMENTAL. Il n'est PAS destiné à un usage en production.**
+>
+> Pour un usage stable, utilisez le projet original :
+> **[OlivierAlbertini/Voxtral-WebUI](https://github.com/OlivierAlbertini/Voxtral-WebUI)**
 
-This project is a fork of [https://github.com/jhj0517/Whisper-WebUI](https://github.com/jhj0517/Whisper-WebUI) that I adapted for Voxtral (the french touch) !
+---
 
-# Feature
-- Select the implementation you want to use between :
-   - [openai/whisper](https://github.com/openai/whisper)
-   - [SYSTRAN/faster-whisper](https://github.com/SYSTRAN/faster-whisper)
-   - [Vaibhavs10/insanely-fast-whisper](https://github.com/Vaibhavs10/insanely-fast-whisper)
-   - [mistralai/Voxtral-Mini-3B](https://huggingface.co/mistralai/Voxtral-Mini-3B-2507) - New multilingual speech recognition model, used by default
-- Generate subtitles from various sources, including :
-  - Files
-  - Youtube
-  - Microphone
-- Currently supported subtitle formats : 
-  - SRT
-  - WebVTT
-  - txt ( only text file without timeline )
-- Speech to Text Translation 
-  - From other languages to English. ( This is Whisper's end-to-end speech-to-text translation feature )
-- Text to Text Translation
-  - Translate subtitle files using Facebook NLLB models
-  - Translate subtitle files using DeepL API
-- Pre-processing audio input with [Silero VAD](https://github.com/snakers4/silero-vad).
-- Pre-processing audio input to separate BGM with [UVR](https://github.com/Anjok07/ultimatevocalremovergui). 
-- Post-processing with speaker diarization using the [pyannote](https://huggingface.co/pyannote/speaker-diarization-3.1) model.
-   - To download the pyannote model, you need to have a Huggingface token and manually accept their terms in the pages below.
-      1. https://huggingface.co/pyannote/speaker-diarization-3.1
-      2. https://huggingface.co/pyannote/segmentation-3.0
+## Contexte
 
-### Pipeline Diagram
-![Transcription Pipeline](./diagram.png)
+Ce dépôt est un fork expérimental de [Voxtral-WebUI](https://github.com/OlivierAlbertini/Voxtral-WebUI),
+lui-même fork de [Whisper-WebUI](https://github.com/jhj0517/Whisper-WebUI).
 
-# Installation and Running
+Il contient des modifications lourdes à usage personnel. Les ajouts ci-dessous
+peuvent être instables, non documentés, et ne suivent pas nécessairement les
+bonnes pratiques du projet d'origine.
 
-- ## Running with Pinokio
+## Nouveautés par rapport à l'original
 
-The app is able to run with [Pinokio](https://github.com/pinokiocomputer/pinokio).
+### Modèles de transcription additionnels
+- **[Cohere ASR](https://huggingface.co/CohereLabs/cohere-transcribe-03-2026)** — modèle 2B, 14 langues
+- **[Qwen3-ASR](https://github.com/QwenLM/Qwen3-ASR)** — modèle 1.7B, 52 langues
 
-1. Install [Pinokio Software](https://program.pinokio.computer/#/?id=install).
-2. Open the software and search for Voxtral-WebUI and install it.
-3. Start the Voxtral-WebUI and connect to the `http://localhost:7860`.
+### Transcription multi-modèles
+- Onglet **Multi-Model** : lance 2 à 4 modèles ASR séquentiellement sur le même audio
+- Fichier aligné multi-sources (comparaison fenêtre par fenêtre)
+- Fichier résumé d'exécution
 
-- ## Running with Docker 
+### Arbitrage LLM
+- Onglet **Arbitrage LLM** : utilise une LLM locale pour arbitrer entre 4 transcriptions
+  ASR et produire un SRT final
+- Pilotage via [opencode](https://github.com/anomalyco/opencode)
+- Prompt système configurable, lexique métier éditable
+- Détection automatique du modèle sur le serveur LLM
 
-1. Install and launch [Docker-Desktop](https://www.docker.com/products/docker-desktop/).
+### Raffinement de diarization
+- Post-traitement SRT : split précis aux changements de locuteur (au lieu de fenêtres
+  fixes de 30s)
+- Utilise pyannote + LLM pour raffiner l'attribution des speakers
+- Post-traitement automatique (fusion micro-segments, dédoublonnage)
 
-2. Git clone the repository
+### Identification des locuteurs
+- Onglet dédié : détection des locuteurs par pyannote (sans transcription ASR)
+- Extraction d'extraits audio par locuteur
+- Export YAML des locuteurs identifiés
+- Interface de saisie des noms, fonctions, rôles
 
-```sh
-git clone https://github.com/OlivierAlbertini/Voxtral-WebUI.git
-```
+### Éditeur SRT standalone (service séparé)
+- Service Flask indépendant ([vtt-editor-pro](https://github.com/Martossien/vtt-editor-pro))
+- Waveform interactive, édition inline, split/merge de segments
+- Export SRT/VTT, auto-save, 5 thèmes
 
-3. Build the image ( Image is about 7GB~ )
+---
 
-```sh
-docker compose build 
-```
+## Installation
 
-4. Run the container 
-
-```sh
-docker compose up
-```
-
-5. Connect to the WebUI with your browser at `http://localhost:7860`
-
-If needed, update the [`docker-compose.yaml`](https://github.com/OlivierAlbertini/Voxtral-WebUI/blob/master/docker-compose.yaml) to match your environment.
-
-- ## Run Locally
-
-### Prerequisite
-To run this WebUI, you need to have `git`, `3.10 <= python <= 3.12`, `FFmpeg`.
-
-**Edit `--extra-index-url` in the [`requirements.txt`](https://github.com/OlivierAlbertini/Voxtral-WebUI/blob/master/requirements.txt) to match your device.<br>** 
-By default, the WebUI assumes you're using an Nvidia GPU and **CUDA 12.6.** If you're using Intel or another CUDA version, read the [`requirements.txt`](https://github.com/OlivierAlbertini/Voxtral-WebUI/blob/master/requirements.txt) and edit `--extra-index-url`.
-
-Please follow the links below to install the necessary software:
-- git : [https://git-scm.com/downloads](https://git-scm.com/downloads)
-- python : [https://www.python.org/downloads/](https://www.python.org/downloads/) **`3.10 ~ 3.12` is recommended.** 
-- FFmpeg :  [https://ffmpeg.org/download.html](https://ffmpeg.org/download.html)
-- CUDA : [https://developer.nvidia.com/cuda-downloads](https://developer.nvidia.com/cuda-downloads)
-
-After installing FFmpeg, **make sure to add the `FFmpeg/bin` folder to your system PATH!**
-
-### Installation Using the Script Files
-
-1. git clone this repository
-```shell
-git clone https://github.com/OlivierAlbertini/Voxtral-WebUI.git
-```
-2. Run `install.bat` or `install.sh` to install dependencies. (It will create a `venv` directory and install dependencies there.)
-3. Start WebUI with `start-webui.bat` or `start-webui.sh` (It will run `python app.py` after activating the venv)
-
-And you can also run the project with command line arguments if you like to, see [wiki](https://github.com/OlivierAlbertini/Voxtral-WebUI/wiki/Command-Line-Arguments) for a guide to arguments.
-
-# VRAM Usages
-This project is integrated with [faster-whisper](https://github.com/guillaumekln/faster-whisper) by default for better VRAM usage and transcription speed.
-
-According to faster-whisper, the efficiency of the optimized whisper model is as follows: 
-| Implementation    | Precision | Beam size | Time  | Max. GPU memory | Max. CPU memory |
-|-------------------|-----------|-----------|-------|-----------------|-----------------|
-| openai/whisper    | fp16      | 5         | 4m30s | 11325MB         | 9439MB          |
-| faster-whisper    | fp16      | 5         | 54s   | 4755MB          | 3244MB          |
-| voxtral-mini-3b   | bfloat16  | -         | -     | ~9500MB         | -               |
-
-## Voxtral Support
-This project now supports [Voxtral-Mini-3B](https://huggingface.co/mistralai/Voxtral-Mini-3B-2507), a multilingual speech recognition model by Mistral AI.
-
-### Voxtral Features:
-- **Multilingual support**: 8 languages including English, French, Spanish, German, Italian, Portuguese, Polish, and Dutch
-- **Automatic language detection**
-- **Long audio support**: Automatically segments audio files longer than 25 minutes
-- **Optimized for GPU**: Uses bfloat16 precision for efficient GPU usage
-
-### Voxtral Installation:
-To use Voxtral, you need to install the development version of transformers:
 ```bash
-pip uninstall transformers -y
+git clone https://github.com/Martossien/exp-TTS.git
+cd exp-TTS
+
+# Créer un environnement virtuel et installer les dépendances
+python -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+
+# Installer les dépendances spécifiques Voxtral (optionnel)
 pip install git+https://github.com/huggingface/transformers.git
+pip install mistral-common[audio]
 ```
 
-Or use the provided installation script:
+### Variables d'environnement
+
+| Variable | Rôle | Défaut |
+|----------|------|--------|
+| `HF_TOKEN` | Token HuggingFace (pyannote, modèles gated) | *(aucun)* |
+| `VOXTRAL_LAUNCH_SCRIPT` | Script de lancement du serveur LLM | `~/launch_arbitrage.sh` |
+| `VOXTRAL_OPENCODE_BIN` | Binaire opencode | `opencode` (depuis PATH) |
+| `VOXTRAL_ARB_MODEL` | Modèle LLM pour l'arbitrage | `local/qwen3-35b-arbitrage` |
+| `SRT_EDITOR_URL` | URL du service éditeur SRT | `http://localhost:7861` |
+
+### Configuration
+
+Les fichiers `configs/*.example` servent de modèles. Copiez-les sans `.example`
+et adaptez-les à votre environnement :
+
 ```bash
-# Windows
-install-voxtral.bat
-
-# Linux/Mac
-./install-voxtral.sh
+cp configs/default_parameters.yaml.example configs/default_parameters.yaml
+cp configs/default_parameters_faster_whisper.yaml.example configs/default_parameters_faster_whisper.yaml
+cp configs/lexique_metier.txt.example configs/lexique_metier.txt
+cp configs/arbitrage_config.json.example configs/arbitrage_config.json
 ```
 
-If you want to use an implementation other than faster-whisper, use `--whisper_type` arg and the repository name.<br>
-Read [wiki](https://github.com/OlivierAlbertini/Voxtral-WebUI/wiki/Command-Line-Arguments) for more info about CLI args.
+## Lancement
 
-If you want to use a fine-tuned model, manually place the models in `models/Whisper/` corresponding to the implementation.
+```bash
+# Mode Faster-Whisper (léger)
+python app.py --whisper_type faster-whisper --server_port 7860
 
-Alternatively, if you enter the huggingface repo id (e.g, [deepdml/faster-whisper-large-v3-turbo-ct2](https://huggingface.co/deepdml/faster-whisper-large-v3-turbo-ct2)) in the "Model" dropdown, it will be automatically downloaded in the directory.
+# Avec configuration personnalisée
+python app.py --whisper_type faster-whisper \
+  --server_port 7860 \
+  --server_name 0.0.0.0 \
+  --config configs/default_parameters.yaml
+```
 
-![image](https://github.com/user-attachments/assets/76487a46-b0a5-4154-b735-ded73b2d83d4)
+## Licence
 
-# REST API
-If you're interested in deploying this app as a REST API, please check out [/backend](https://github.com/OlivierAlbertini/Voxtral-WebUI/tree/master/backend).
+Ce projet conserve la licence du projet original (MIT).
+Voir [LICENSE](LICENSE).
 
-## TODO🗓
+---
 
-- [x] Add DeepL API translation
-- [x] Add NLLB Model translation
-- [x] Integrate with faster-whisper
-- [x] Integrate with insanely-fast-whisper
-- [x] Integrate with whisperX ( Only speaker diarization part )
-- [x] Add background music separation pre-processing with [UVR](https://github.com/Anjok07/ultimatevocalremovergui)  
-- [x] Add fast api script
-- [ ] Add CLI usages
-- [ ] Support real-time transcription for microphone
-
-### Translation 🌐
-Any PRs that translate the language into [translation.yaml](https://github.com/OlivierAlbertini/Voxtral-WebUI/blob/master/configs/translation.yaml) would be greatly appreciated!
+**Rappel :** ce dépôt est un fork expérimental. Pour un usage stable,
+préférez [OlivierAlbertini/Voxtral-WebUI](https://github.com/OlivierAlbertini/Voxtral-WebUI).
