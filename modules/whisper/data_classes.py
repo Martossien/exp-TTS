@@ -4,12 +4,11 @@ import torch
 from typing import Optional, Dict, List, Union, NamedTuple
 from fastapi import Query
 from pydantic import BaseModel, Field, field_validator, ConfigDict
-from gradio_i18n import Translate, gettext as _
 from enum import Enum
 from copy import deepcopy
 import yaml
 
-from modules.utils.constants import *
+from modules.utils.constants import AUTOMATIC_DETECTION, get_translation
 
 
 class WhisperImpl(Enum):
@@ -17,6 +16,8 @@ class WhisperImpl(Enum):
     FASTER_WHISPER = "faster-whisper"
     INSANELY_FAST_WHISPER = "insanely_fast_whisper"
     VOXTRAL_MINI = "voxtral-mini"
+    QWEN3_ASR = "qwen3-asr"
+    COHERE_ASR = "cohere-asr"
 
 
 class Segment(BaseModel):
@@ -90,7 +91,7 @@ class VadParams(BaseParams):
     """Voice Activity Detection parameters"""
     vad_filter: bool = Field(default=False, description="Enable voice activity detection to filter out non-speech parts")
     threshold: float = Field(
-        default=0.5,
+        default=0.35,
         ge=0.0,
         le=1.0,
         description="Speech threshold for Silero VAD. Probabilities above this value are considered speech"
@@ -106,7 +107,7 @@ class VadParams(BaseParams):
         description="Maximum duration of speech chunks in seconds"
     )
     min_silence_duration_ms: int = Field(
-        default=2000,
+        default=550,
         ge=0,
         description="Minimum silence duration between speech chunks"
     )
@@ -120,10 +121,10 @@ class VadParams(BaseParams):
     def to_gradio_inputs(cls, defaults: Optional[Dict] = None) -> List[gr.components.base.FormComponent]:
         return [
             gr.Checkbox(
-                label=_("Enable Silero VAD Filter"),
+                label="Enable Silero VAD Filter",
                 value=defaults.get("vad_filter", cls.__fields__["vad_filter"].default),
                 interactive=True,
-                info=_("Enable this to transcribe only detected voice")
+                info="Enable this to transcribe only detected voice"
             ),
             gr.Slider(
                 minimum=0.0, maximum=1.0, step=0.01, label="Speech Threshold",
@@ -137,7 +138,7 @@ class VadParams(BaseParams):
             ),
             gr.Number(
                 label="Maximum Speech Duration (s)",
-                value=defaults.get("max_speech_duration_s", GRADIO_NONE_NUMBER_MAX),
+                value=defaults.get("max_speech_duration_s", None),
                 info="Maximum duration of speech chunks in \"seconds\"."
             ),
             gr.Number(
@@ -156,6 +157,10 @@ class VadParams(BaseParams):
 class DiarizationParams(BaseParams):
     """Speaker diarization parameters"""
     is_diarize: bool = Field(default=False, description="Enable speaker diarization")
+    diarization_model: str = Field(
+        default="pyannote/speaker-diarization-community-1",
+        description="Diarization model to use (pyannote/speaker-diarization-community-1 or pyannote/speaker-diarization-3.1)"
+    )
     diarization_device: str = Field(default="cuda", description="Device to run Diarization model.")
     hf_token: str = Field(
         default="",
@@ -176,43 +181,52 @@ class DiarizationParams(BaseParams):
 
     @classmethod
     def to_gradio_inputs(cls,
-                         defaults: Optional[Dict] = None,
-                         available_devices: Optional[List] = None,
-                         device: Optional[str] = None) -> List[gr.components.base.FormComponent]:
+        defaults: Optional[Dict] = None,
+        available_devices: Optional[List] = None,
+        device: Optional[str] = None) -> List[gr.components.base.FormComponent]:
         return [
             gr.Checkbox(
-                label=_("Enable Diarization"),
+                label="Enable Diarization",
                 value=defaults.get("is_diarize", cls.__fields__["is_diarize"].default),
             ),
             gr.Dropdown(
-                label=_("Device"),
+                label="Diarization Model",
+                choices=[
+                    "pyannote/speaker-diarization-community-1",
+                    "pyannote/speaker-diarization-3.1"
+                ],
+                value=defaults.get("diarization_model", cls.__fields__["diarization_model"].default),
+                info="community-1: Latest version with better accuracy | 3.1: Legacy version"
+            ),
+            gr.Dropdown(
+                label="Device",
                 choices=["cpu", "cuda", "xpu"] if available_devices is None else available_devices,
                 value=defaults.get("device", device),
             ),
             gr.Textbox(
-                label=_("HuggingFace Token"),
+                label="HuggingFace Token",
                 value=defaults.get("hf_token", cls.__fields__["hf_token"].default),
-                info=_("This is only needed the first time you download the model")
+                info="This is only needed the first time you download the model"
             ),
             gr.Checkbox(
-                label=_("Offload sub model when finished"),
+                label="Offload sub model when finished",
                 value=defaults.get("enable_offload", cls.__fields__["enable_offload"].default),
             ),
             gr.Number(
-                label=_("Minimum speakers"),
+                label="Minimum speakers",
                 value=defaults.get("min_speakers", cls.__fields__["min_speakers"].default),
                 minimum=1,
                 maximum=20,
                 precision=0,
-                info=_("Minimum number of speakers to detect. Leave empty for automatic detection")
+                info="Minimum number of speakers to detect. Leave empty for automatic detection"
             ),
             gr.Number(
-                label=_("Maximum speakers"),
+                label="Maximum speakers",
                 value=defaults.get("max_speakers", cls.__fields__["max_speakers"].default),
                 minimum=1,
                 maximum=20,
                 precision=0,
-                info=_("Maximum number of speakers to detect. Leave empty for automatic detection")
+                info="Maximum number of speakers to detect. Leave empty for automatic detection"
             )
         ]
 
@@ -247,19 +261,19 @@ class BGMSeparationParams(BaseParams):
                         available_models: Optional[List] = None) -> List[gr.components.base.FormComponent]:
         return [
             gr.Checkbox(
-                label=_("Enable Background Music Remover Filter"),
+                label="Enable Background Music Remover Filter",
                 value=defaults.get("is_separate_bgm", cls.__fields__["is_separate_bgm"].default),
                 interactive=True,
-                info=_("Enabling this will remove background music")
+                info="Enabling this will remove background music"
             ),
             gr.Dropdown(
-                label=_("Model"),
+                label="Model",
                 choices=["UVR-MDX-NET-Inst_HQ_4",
                          "UVR-MDX-NET-Inst_3"] if available_models is None else available_models,
                 value=defaults.get("uvr_model_size", cls.__fields__["uvr_model_size"].default),
             ),
             gr.Dropdown(
-                label=_("Device"),
+                label="Device",
                 choices=["cpu", "cuda", "xpu"] if available_devices is None else available_devices,
                 value=defaults.get("device", device),
             ),
@@ -270,11 +284,11 @@ class BGMSeparationParams(BaseParams):
                 info="Segment size for UVR model"
             ),
             gr.Checkbox(
-                label=_("Save separated files to output"),
+                label="Save separated files to output",
                 value=defaults.get("save_file", cls.__fields__["save_file"].default),
             ),
             gr.Checkbox(
-                label=_("Offload sub model when finished"),
+                label="Offload sub model when finished",
                 value=defaults.get("enable_offload", cls.__fields__["enable_offload"].default),
             )
         ]
@@ -343,8 +357,9 @@ class WhisperParams(BaseParams):
         default="\"'.。,，!！?？:：”)]}、",
         description="Punctuations to merge with previous word"
     )
-    max_new_tokens: Optional[int] = Field(default=32000, description="Maximum number of new tokens per chunk")
-    chunk_length: Optional[int] = Field(default=1500, description="Length of audio segments in seconds (default: 1500 = 25 minutes for Voxtral)")
+    max_new_tokens: Optional[int] = Field(default=None, description="Maximum number of new tokens per chunk. Leave empty to use the model limit.")
+    chunk_length: Optional[int] = Field(default=30, description="Length of audio segments in seconds (max 30s — limited by Voxtral audio encoder max_source_positions=1500 @ 50 pos/sec)")
+    chunk_overlap: Optional[int] = Field(default=2, description="Overlap in seconds between consecutive audio chunks to avoid cutting words at boundaries")
     hallucination_silence_threshold: Optional[float] = Field(
         default=None,
         description="Threshold for skipping silent periods in hallucination detection"
@@ -368,7 +383,7 @@ class WhisperParams(BaseParams):
     @field_validator('lang')
     def validate_lang(cls, v):
         from modules.utils.constants import AUTOMATIC_DETECTION
-        return None if v == AUTOMATIC_DETECTION.unwrap() else v
+        return None if v == AUTOMATIC_DETECTION else v
 
     @field_validator('suppress_tokens')
     def validate_supress_tokens(cls, v):
@@ -464,7 +479,7 @@ class WhisperParams(BaseParams):
             ),
             gr.Textbox(
                 label="Initial Prompt",
-                value=defaults.get("initial_prompt", GRADIO_NONE_STR),
+                value=defaults.get("initial_prompt", ""),
                 info="Initial prompt for first window"
             ),
             gr.Slider(
@@ -502,8 +517,8 @@ class WhisperParams(BaseParams):
             ),
             gr.Textbox(
                 label="Prefix",
-                value=defaults.get("prefix", GRADIO_NONE_STR),
-                info="Prefix text for first window"
+                value=defaults.get("prefix", ""),
+                info="Prefix text added before transcription"
             ),
             gr.Checkbox(
                 label="Suppress Blank",
@@ -537,20 +552,26 @@ class WhisperParams(BaseParams):
             ),
             gr.Number(
                 label="Max New Tokens",
-                value=defaults.get("max_new_tokens", 32000),
+                value=defaults.get("max_new_tokens", cls.__fields__["max_new_tokens"].default),
                 precision=0,
-                info="Maximum number of new tokens per chunk"
+                info="Maximum number of new tokens per chunk. Leave empty to use the model limit."
             ),
             gr.Number(
                 label="Chunk Length (s)",
                 value=defaults.get("chunk_length", cls.__fields__["chunk_length"].default),
                 precision=0,
-                info="Length of audio segments in seconds (1500 = 25 minutes for long files)"
+                info="Max audio segment length in seconds. Voxtral encoder limit: 30s (max_source_positions=1500 @ 50 pos/sec). Do not exceed 30."
+            ),
+            gr.Number(
+                label="Chunk Overlap (s)",
+                value=defaults.get("chunk_overlap", cls.__fields__["chunk_overlap"].default),
+                precision=0,
+                info="Overlap in seconds between consecutive chunks to avoid cutting words at boundaries"
             ),
             gr.Number(
                 label="Hallucination Silence Threshold (sec)",
                 value=defaults.get("hallucination_silence_threshold",
-                                   GRADIO_NONE_NUMBER_MIN),
+                                   None),
                 info="Threshold for skipping silent periods in hallucination detection"
             ),
             gr.Textbox(
@@ -561,7 +582,7 @@ class WhisperParams(BaseParams):
             gr.Number(
                 label="Language Detection Threshold",
                 value=defaults.get("language_detection_threshold",
-                                   GRADIO_NONE_NUMBER_MIN),
+                                   None),
                 info="Threshold for language detection probability"
             ),
             gr.Number(
@@ -594,7 +615,7 @@ class WhisperParams(BaseParams):
 
         inputs += [
             gr.Checkbox(
-                label=_("Offload sub model when finished"),
+                label="Offload sub model when finished",
                 value=defaults.get("enable_offload", cls.__fields__["enable_offload"].default),
             )
         ]

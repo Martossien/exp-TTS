@@ -1,13 +1,52 @@
+# ── Audio / Vidéo ──────────────────────────────────
 *.wav
-*.png
-*.mp4
 *.mp3
+*.mp4
+*.m4a
+*.ogg
+*.aac
+*.flac
+*.opus
+
+# ── Images ─────────────────────────────────────────
+*.png
+*.jpg
+*.jpeg
+
+# ── Fichiers sensibles ─────────────────────────────
 **/.env
-**/.idea/
-**/.pytest_cache/
-**/venv/
-**/__pycache__/
+configs/default_parameters.yaml
+configs/default_parameters_faster_whisper.yaml
+configs/arbitrage_config.json
+configs/lexique_metier.txt
+_backup_local/
+
+# ── Logs / Runtime ─────────────────────────────────
+*.log
+logs/
+pids/
+modules/yt_tmp*.wav
+
+# ── Sorties / Modèles / Cache ──────────────────────
 outputs/
 models/
-modules/yt_tmp.wav
-configs/default_parameters.yaml
+cache/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# ── IDE / Environnement ────────────────────────────
+**/.idea/
+**/venv/
+.venv/
+
+# ── Backups / Temp / Divers ────────────────────────
+*.backup
+*.bak
+app_fixed.py
+dummy.txt
+fix_lexique.py
+test_audio.wav
+test_transcription.py
+audio-test-arbitrage-*
+MagicMock/

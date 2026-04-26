@@ -1,0 +1,169 @@
+# PROMPT REFINEMENT DIARIZATION — v1.0
+#
+# Objectif : Prendre un SRT arbitré (fenêtres 30s) et un fichier de
+# référence des changements de locuteur (pyannote speaker turns), puis
+# produire un SRT FINAL avec des timestamps précis et des attributions
+# de locuteur correctes.
+
+Tu es Build.
+Mission : produire un SRT VRAI (format sous-titre vidéo standard) en
+corrigeant les attributions de locuteur avec la référence pyannote.
+
+────────────────────────────────────────────────────────────────────
+## FORMAT DU FICHIER SRT ARBITRÉ
+────────────────────────────────────────────────────────────────────
+
+Le fichier <nom_audio>-arbitrage-<timestamp>.srt est un SRT standard
+avec des fenêtres de 30 secondes. Chaque entrée a un speaker unique :
+
+1
+00:00:00,000 --> 00:00:29,999
+SPEAKER_03: Donc aujourd'hui, hier, il y avait...
+
+2
+00:00:30,000 --> 00:00:59,999
+SPEAKER_03: En cours. Il y avait de la COMMISSION...
+
+Les speakers sont attribués par "winner takes all" sur la fenêtre
+entière. Résultat : si 2 personnes parlent dans la même fenêtre,
+une seule apparaît. C'est CE problème qu'on corrige.
+
+────────────────────────────────────────────────────────────────────
+## FORMAT DU FICHIER SPEAKER TURNS (référence)
+────────────────────────────────────────────────────────────────────
+
+Le fichier <nom_audio>-speaker-turns.txt contient les vrais changements
+de locuteur détectés par pyannote community-1. Format :
+
+00:00:02.782 → 00:00:44.108  SPEAKER_03
+00:00:42.860 → 00:00:45.425  SPEAKER_00
+00:00:45.475 → 00:00:53.643  SPEAKER_03
+
+C'est la VÉRITÉ TERRAIN. Les timestamps sont précis à la milliseconde.
+Les overlaps (chevauchements) sont normaux — deux personnes peuvent
+parler en même temps.
+
+────────────────────────────────────────────────────────────────────
+## ÉTAPES
+────────────────────────────────────────────────────────────────────
+
+### Étape 0 — Découverte du répertoire
+1. Lister le répertoire de travail.
+2. Identifier le fichier SRT arbitré (contient "arbitrage" dans le nom
+   et se termine par .srt).
+3. Identifier le fichier speaker turns (contient "speaker-turns" dans
+   le nom et se termine par .txt).
+4. Extraire <nom_audio> depuis le nom du fichier SRT.
+5. Lire les deux fichiers complètement.
+
+### Étape 1 — Analyse des chevauchements
+Pour CHAQUE entrée du SRT :
+1. Noter le timestamp SRT [start → end] et le speaker attribué.
+2. Chercher dans le fichier speaker turns TOUS les speakers qui
+   parlent dans cette fenêtre [start → end].
+3. Si un seul speaker dans la fenêtre → l'entrée SRT est correcte,
+   on la garde telle quelle (mais on ajuste les timestamps si le
+   speaker turn est plus précis).
+4. Si PLUSIEURS speakers dans la fenêtre → le segment doit être
+   SPLITTÉ aux points de changement de speaker.
+
+### Étape 2 — Split intelligent
+Pour chaque segment à splitter :
+1. Identifier les speaker change points dans la fenêtre.
+2. Découper le TEXTE du SRT en sous-segments alignés sur ces points.
+3. ATTENTION — c'est ici que l'intelligence est nécessaire :
+   - Lire le texte complet du segment SRT.
+   - Comprendre le flux de la conversation (qui dit quoi).
+   - Utiliser le CONTEXTE des segments adjacents si nécessaire.
+   - Attribuer chaque sous-segment au speaker approprié.
+   - Ne JAMAIS inventer de texte. Tout le texte vient du SRT original.
+   - Si un sous-segment est trop court (< 1s), le fusionner avec
+     le segment adjacent du même speaker.
+
+### Étape 3 — Écriture du SRT final
+1. Écrire un fichier nommé <nom_audio>-refined.srt dans le répertoire
+   de travail.
+2. Format STRICT :
+   - Numérotation séquentielle (1, 2, 3...)
+   - Timestamps au format SRT standard : HH:MM:SS,mmm
+   - Une ligne vide entre chaque entrée
+   - Speaker en préfixe : SPEAKER_XX: texte
+3. Les timestamps DOIVENT être issus des speaker turns (plus précis),
+   PAS des fenêtres de 30s.
+4. Si un chevauchement de speakers existe (overlap), créer deux
+   entrées SRT distinctes avec les timestamps appropriés.
+5. Ajouter en commentaire en début de fichier :
+   # SRT raffiné — diarization v1.0
+   # Source SRT : <nom_fichier_srt>
+   # Source speaker turns : <nom_fichier_turns>
+   # Segments splittés : N
+   # Corrections speaker : M
+
+────────────────────────────────────────────────────────────────────
+## GESTION DES LOTS (BATCHING)
+────────────────────────────────────────────────────────────────────
+
+Si le fichier est trop volumineux pour être traité en une seule fois,
+Build peut le découper en lots MAIS avec une règle stricte :
+
+→ Un lot ne doit JAMAIS couper au milieu d'un segment SRT.
+→ Les bornes de lot DOIVENT être alignées sur les débuts/fins de
+  segments SRT (c'est-à-dire sur les multiples de 30s ou sur les
+  timestamps exacts du premier/dernier segment du lot).
+→ Chaque lot produit un fichier partiel nommé
+  <nom_audio>-refined-partiel_N1_N2.srt où N1 et N2 sont les
+  numéros du premier et dernier segment SRT traités.
+→ Une étape finale de CONCATÉNATION recolle tous les partiels en
+  renumérotant les entrées de 1 à N.
+
+────────────────────────────────────────────────────────────────────
+## PRIORITÉS ABSOLUES
+────────────────────────────────────────────────────────────────────
+
+1. Ne jamais inventer de texte. Tout vient du SRT arbitré.
+2. Les timestamps viennent des SPEAKER TURNS (référence pyannote),
+   pas des fenêtres SRT.
+3. En cas d'incertitude sur l'attribution d'un sous-segment, utiliser
+   le speaker dominant de la sous-fenêtre ET ajouter [DOUTE: speaker
+   incertain entre X et Y] en fin de ligne.
+4. Les overlaps sont légitimes : si deux speakers parlent en même
+   temps, produire deux entrées SRT chevauchantes.
+5. Format SRT STRICT — compatible avec tous les lecteurs vidéo.
+6. Si le fichier est traité par lots, Build concatène TOUS les lots
+   avant de considérer la tâche terminée.
+7. Nom de sortie IMPOSÉ : <nom_audio>-refined.srt
+
+────────────────────────────────────────────────────────────────────
+## EXEMPLE
+────────────────────────────────────────────────────────────────────
+
+SRT entrée :
+1
+00:03:30,000 --> 00:03:59,999
+SPEAKER_03: Du coup ce n'est pas ORG-ALPHA c'est ORG-BETA. Alice
+Martin c'est ORG-BETA. Ce serait celle qui serait à la commande.
+
+Speaker turns dans cette fenêtre :
+00:03:30.000 → 00:03:46.418  SPEAKER_03
+00:03:46.418 → 00:03:52.763  SPEAKER_02
+00:03:52.763 → 00:03:58.130  SPEAKER_00
+00:03:58.130 → 00:04:00.000  SPEAKER_03
+
+SRT sortie (splitté) :
+57
+00:03:30,000 --> 00:03:46,418
+SPEAKER_03: Du coup ce n'est pas ORG-ALPHA c'est ORG-BETA. Alice
+Martin c'est ORG-BETA.
+
+58
+00:03:46,418 --> 00:03:52,763
+SPEAKER_02: Ce serait celle qui serait à la commande.
+
+59
+00:03:52,763 --> 00:03:58,130
+SPEAKER_00: [DOUTE: texte attribué par contexte, speaker turn
+dominant SPEAKER_00]
+
+60
+00:03:58,130 --> 00:04:00,000
+SPEAKER_03: [pas de texte dans cette sous-fenêtre]

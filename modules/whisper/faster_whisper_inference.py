@@ -15,6 +15,9 @@ from argparse import Namespace
 from modules.utils.paths import (FASTER_WHISPER_MODELS_DIR, DIARIZATION_MODELS_DIR, UVR_MODELS_DIR, OUTPUT_DIR)
 from modules.whisper.data_classes import *
 from modules.whisper.base_transcription_pipeline import BaseTranscriptionPipeline
+from modules.utils.logger import get_logger
+
+logger = get_logger()
 
 
 class FasterWhisperInference(BaseTranscriptionPipeline):
@@ -68,8 +71,24 @@ class FasterWhisperInference(BaseTranscriptionPipeline):
 
         params = WhisperParams.from_list(list(whisper_params))
 
+        logger.info(
+            "[FASTER-WHISPER] Transcription requested: model=%s compute_type=%s language=%s "
+            "beam_size=%s vad=%s condition_on_prev=%s",
+            params.model_size, params.compute_type, params.lang,
+            params.beam_size, getattr(params, 'vad_filter', False),
+            getattr(params, 'condition_on_previous_text', True),
+        )
+
         if params.model_size != self.current_model_size or self.model is None or self.current_compute_type != params.compute_type:
             self.update_model(params.model_size, params.compute_type, progress)
+
+        max_new_tokens = params.max_new_tokens
+        if max_new_tokens in (None, 0):
+            max_new_tokens = None
+        else:
+            max_new_tokens = int(max_new_tokens)
+            if self.model is not None and max_new_tokens >= self.model.max_length - 3:
+                max_new_tokens = None
 
         segments, info = self.model.transcribe(
             audio=audio,
@@ -93,7 +112,7 @@ class FasterWhisperInference(BaseTranscriptionPipeline):
             word_timestamps=params.word_timestamps,
             prepend_punctuations=params.prepend_punctuations,
             append_punctuations=params.append_punctuations,
-            max_new_tokens=params.max_new_tokens,
+            max_new_tokens=max_new_tokens,
             chunk_length=params.chunk_length,
             hallucination_silence_threshold=params.hallucination_silence_threshold,
             hotwords=params.hotwords,
@@ -102,6 +121,11 @@ class FasterWhisperInference(BaseTranscriptionPipeline):
             prompt_reset_on_temperature=params.prompt_reset_on_temperature,
         )
         progress(0, desc="Loading audio..")
+
+        logger.info(
+            "[FASTER-WHISPER] Audio info: language=%s language_probability=%.2f duration=%.2fs",
+            info.language, info.language_probability, info.duration,
+        )
 
         segments_result = []
         for segment in segments:
@@ -112,6 +136,10 @@ class FasterWhisperInference(BaseTranscriptionPipeline):
             segments_result.append(Segment.from_faster_whisper(segment))
 
         elapsed_time = time.time() - start_time
+        logger.info(
+            "[FASTER-WHISPER] Transcription complete: segments=%s elapsed=%.2fs",
+            len(segments_result), elapsed_time,
+        )
         return segments_result, elapsed_time
 
     def update_model(self,
@@ -137,8 +165,10 @@ class FasterWhisperInference(BaseTranscriptionPipeline):
 
         model_size_dirname = model_size.replace("/", "--") if "/" in model_size else model_size
         if model_size not in self.model_paths and model_size_dirname not in self.model_paths:
-            print(f"Model is not detected. Trying to download \"{model_size}\" from huggingface to "
-                  f"\"{os.path.join(self.model_dir, model_size_dirname)} ...")
+            logger.info(
+                "[FASTER-WHISPER] Model '%s' not found locally, downloading from HuggingFace to '%s'",
+                model_size, os.path.join(self.model_dir, model_size_dirname),
+            )
             huggingface_hub.snapshot_download(
                 model_size,
                 local_dir=os.path.join(self.model_dir, model_size_dirname),
@@ -155,6 +185,10 @@ class FasterWhisperInference(BaseTranscriptionPipeline):
             (model_size in faster_whisper.available_models() and os.path.exists(official_model_path))):
             local_files_only = True
 
+        logger.info(
+            "[FASTER-WHISPER] Loading model: path=%s device=%s compute_type=%s local_files_only=%s",
+            self.current_model_size, self.device, compute_type, local_files_only,
+        )
         self.current_compute_type = compute_type
         self.model = faster_whisper.WhisperModel(
             device=self.device,
@@ -163,6 +197,7 @@ class FasterWhisperInference(BaseTranscriptionPipeline):
             compute_type=self.current_compute_type,
             local_files_only=local_files_only
         )
+        logger.info("[FASTER-WHISPER] Model loaded successfully: %s", model_size)
 
     def get_model_paths(self):
         """

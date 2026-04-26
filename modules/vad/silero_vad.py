@@ -47,6 +47,12 @@ class SileroVAD:
 
         if not isinstance(audio, np.ndarray):
             audio = faster_whisper.decode_audio(audio, sampling_rate=sampling_rate)
+        else:
+            audio = np.asarray(audio, dtype=np.float32)
+
+        if audio.ndim > 1:
+            audio = audio.mean(axis=0 if audio.shape[0] <= audio.shape[-1] else 1)
+        audio = np.ascontiguousarray(audio.reshape(-1), dtype=np.float32)
 
         duration = audio.shape[0] / sampling_rate
         duration_after_vad = duration
@@ -108,12 +114,15 @@ class SileroVAD:
         min_silence_samples = self.sampling_rate * min_silence_duration_ms / 1000
         min_silence_samples_at_max_speech = self.sampling_rate * 98 / 1000
 
+        if audio.ndim > 1:
+            audio = audio.mean(axis=0 if audio.shape[0] <= audio.shape[-1] else 1)
+        audio = np.ascontiguousarray(audio.reshape(-1), dtype=np.float32)
         audio_length_samples = len(audio)
 
         padded_audio = np.pad(
             audio, (0, window_size_samples - audio.shape[0] % window_size_samples)
         )
-        speech_probs = self.model(padded_audio.reshape(1, -1)).squeeze(0)
+        speech_probs = np.asarray(self.model(padded_audio)).reshape(-1)
 
         triggered = False
         speeches = []
@@ -274,4 +283,3 @@ class SileroVAD:
                 segment.end = ts_map.get_original_time(segment.end)
 
         return segments
-

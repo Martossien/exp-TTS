@@ -1,0 +1,41 @@
+[Unit]
+Description=Voxtral-WebUI - Interface de transcription Voxtral
+Documentation=https://github.com/OlivierAlbertini/Voxtral-WebUI
+After=network.target
+
+[Service]
+Type=forking
+User=root
+Group=root
+WorkingDirectory=/root/Voxtral-WebUI
+
+# Commande de démarrage avec vérification VRAM
+ExecStart=/root/Voxtral-WebUI/scripts/voxtral-service-wrapper.sh start
+ExecStop=/root/Voxtral-WebUI/scripts/voxtral-service-wrapper.sh stop
+ExecReload=/root/Voxtral-WebUI/scripts/voxtral-service-wrapper.sh restart
+
+# Gestion du processus
+PIDFile=/var/run/voxtral-webui.pid
+
+# Redémarrage automatique en cas d'échec (sauf si arrêt manuel)
+Restart=on-failure
+RestartSec=10
+
+# Variables d'environnement
+Environment="PATH=/root/.pyenv/versions/voxtral-env/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+Environment="PYTHONPATH=/root/Voxtral-WebUI"
+Environment="HF_HOME=/root/Voxtral-WebUI/models"
+Environment="TRANSFORMERS_CACHE=/root/Voxtral-WebUI/models"
+
+# Sécurité
+NoNewPrivileges=false
+ProtectSystem=false
+ProtectHome=false
+
+# Logs
+StandardOutput=append:/var/log/voxtral-webui/service.log
+StandardError=append:/var/log/voxtral-webui/service.log
+SyslogIdentifier=voxtral-webui
+
+[Install]
+WantedBy=multi-user.target

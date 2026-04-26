@@ -56,7 +56,7 @@ class NLLBInference(TranslationBase):
                                                                cache_dir=self.model_dir,
                                                                local_files_only=local_files_only)
             self.tokenizer = AutoTokenizer.from_pretrained(pretrained_model_name_or_path=model_size,
-                                                           cache_dir=os.path.join(self.model_dir, "tokenizers"),
+                                                           cache_dir=self.model_dir,
                                                            local_files_only=local_files_only)
 
         self.pipeline = pipeline("translation",

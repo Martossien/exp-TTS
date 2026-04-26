@@ -6,6 +6,8 @@ WHISPER_MODELS_DIR = os.path.join(MODELS_DIR, "Whisper")
 FASTER_WHISPER_MODELS_DIR = os.path.join(WHISPER_MODELS_DIR, "faster-whisper")
 INSANELY_FAST_WHISPER_MODELS_DIR = os.path.join(WHISPER_MODELS_DIR, "insanely-fast-whisper")
 VOXTRAL_MODELS_DIR = os.path.join(WHISPER_MODELS_DIR, "voxtral")
+QWEN3_ASR_MODELS_DIR = os.path.join(WHISPER_MODELS_DIR, "qwen3-asr")
+COHERE_ASR_MODELS_DIR = os.path.join(WHISPER_MODELS_DIR, "cohere-asr")
 NLLB_MODELS_DIR = os.path.join(MODELS_DIR, "NLLB")
 DIARIZATION_MODELS_DIR = os.path.join(MODELS_DIR, "Diarization")
 UVR_MODELS_DIR = os.path.join(MODELS_DIR, "UVR", "MDX_Net_Models")
@@ -27,6 +29,8 @@ for dir_path in [MODELS_DIR,
                  FASTER_WHISPER_MODELS_DIR,
                  INSANELY_FAST_WHISPER_MODELS_DIR,
                  VOXTRAL_MODELS_DIR,
+                 QWEN3_ASR_MODELS_DIR,
+                 COHERE_ASR_MODELS_DIR,
                  NLLB_MODELS_DIR,
                  DIARIZATION_MODELS_DIR,
                  UVR_MODELS_DIR,

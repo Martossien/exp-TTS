@@ -1,0 +1,6 @@
+{
+  "launch_script": "~/launch_arbitrage.sh",
+  "model_id": "local/qwen3-35b-arbitrage",
+  "api_port": 8080,
+  "opencode_bin": "opencode"
+}

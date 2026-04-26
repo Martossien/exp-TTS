@@ -11,6 +11,7 @@ from faster_whisper.vad import VadOptions
 import gc
 from copy import deepcopy
 import time
+import uuid
 
 from modules.uvr.music_separator import MusicSeparator
 from modules.utils.paths import (WHISPER_MODELS_DIR, DIARIZATION_MODELS_DIR, OUTPUT_DIR, DEFAULT_PARAMETERS_CONFIG_PATH,
@@ -139,7 +140,7 @@ class BaseTranscriptionPipeline(ABC):
                 if self.music_separator.audio_info is None:
                     origin_sample_rate = 16000
                 else:
-                    origin_sample_rate = self.music_separator.audio_info.sample_rate
+                    origin_sample_rate = self.music_separator.audio_info.samplerate
                 audio = self.resample_audio(audio=audio, original_sample_rate=origin_sample_rate)
 
             if bgm_params.enable_offload:
@@ -190,16 +191,25 @@ class BaseTranscriptionPipeline(ABC):
 
         if diarization_params.is_diarize:
             progress(0.99, desc="Diarizing speakers..")
-            result, elapsed_time_diarization = self.diarizer.run(
-                audio=origin_audio,
-                use_auth_token=diarization_params.hf_token if diarization_params.hf_token else os.environ.get("HF_TOKEN"),
-                transcribed_result=result,
-                device=diarization_params.diarization_device,
-                min_speakers=diarization_params.min_speakers,
-                max_speakers=diarization_params.max_speakers
-            )
-            if diarization_params.enable_offload:
-                self.diarizer.offload()
+            try:
+                result, elapsed_time_diarization = self.diarizer.run(
+                    audio=origin_audio,
+                    use_auth_token=diarization_params.hf_token if diarization_params.hf_token else os.environ.get("HF_TOKEN"),
+                    transcribed_result=result,
+                    device=diarization_params.diarization_device,
+                    model_name=diarization_params.diarization_model,
+                    min_speakers=diarization_params.min_speakers,
+                    max_speakers=diarization_params.max_speakers
+                )
+            except Exception as e:
+                logger.exception(
+                    "Diarization failed; keeping transcription result without speaker labels: %s",
+                    e
+                )
+                gr.Warning("Diarization failed; saving transcription without speaker labels.")
+            finally:
+                if diarization_params.enable_offload:
+                    self.diarizer.offload()
 
         self.cache_parameters(
             params=params,
@@ -257,11 +267,24 @@ class BaseTranscriptionPipeline(ABC):
         result_file_path:
             Output file path to return to gr.Files()
         """
+        request_id = uuid.uuid4().hex[:8]
         try:
             params = TranscriptionPipelineParams.from_list(list(pipeline_params))
             writer_options = {
                 "highlight_words": True if params.whisper.word_timestamps else False
             }
+            logger.info(
+                "[TRANSCRIBE %s] Request received: files_type=%s input_folder=%s "
+                "file_format=%s add_timestamp=%s lang=%s model=%s offload=%s",
+                request_id,
+                type(files).__name__,
+                input_folder_path or "",
+                file_format,
+                add_timestamp,
+                params.whisper.lang,
+                params.whisper.model_size,
+                params.whisper.enable_offload,
+            )
 
             if input_folder_path:
                 files = get_media_files(input_folder_path, include_sub_directory=include_subdirectory)
@@ -269,9 +292,13 @@ class BaseTranscriptionPipeline(ABC):
                 files = [files]
             if files and isinstance(files[0], gr.utils.NamedString):
                 files = [file.name for file in files]
+            if not files:
+                raise ValueError("No input file was provided.")
+            logger.info("[TRANSCRIBE %s] Normalized input files: %s", request_id, files)
 
             files_info = {}
             for file in files:
+                logger.info("[TRANSCRIBE %s] Processing file: %s", request_id, file)
                 transcribed_segments, time_for_task = self.run(
                     file,
                     progress,
@@ -282,11 +309,13 @@ class BaseTranscriptionPipeline(ABC):
                 )
 
                 file_name, file_ext = os.path.splitext(os.path.basename(file))
+                model_slug = params.whisper.model_size.replace("/", "-").replace(" ", "-")
+                output_file_name = f"{file_name}-{model_slug}"
                 if save_same_dir and input_folder_path:
                     output_dir = os.path.dirname(file)
                     subtitle, file_path = generate_file(
                         output_dir=output_dir,
-                        output_file_name=file_name,
+                        output_file_name=output_file_name,
                         output_format=file_format,
                         result=transcribed_segments,
                         add_timestamp=add_timestamp,
@@ -295,11 +324,19 @@ class BaseTranscriptionPipeline(ABC):
 
                 subtitle, file_path = generate_file(
                     output_dir=self.output_dir,
-                    output_file_name=file_name,
+                    output_file_name=output_file_name,
                     output_format=file_format,
                     result=transcribed_segments,
                     add_timestamp=add_timestamp,
                     **writer_options
+                )
+                logger.info(
+                    "[TRANSCRIBE %s] Subtitle generated: source=%s output=%s size=%s segments=%s",
+                    request_id,
+                    file,
+                    file_path,
+                    os.path.getsize(file_path) if os.path.exists(file_path) else "missing",
+                    len(transcribed_segments) if transcribed_segments is not None else "unknown",
                 )
                 files_info[file_name] = {"subtitle": read_file(file_path), "time_for_task": time_for_task, "path": file_path}
 
@@ -313,11 +350,23 @@ class BaseTranscriptionPipeline(ABC):
 
             result_str = f"Done in {self.format_time(total_time)}! Subtitle is in the outputs folder.\n\n{total_result}"
             result_file_path = [info['path'] for info in files_info.values()]
+            logger.info(
+                "[TRANSCRIBE %s] Returning result to UI: files=%s total_time=%.2fs result_chars=%s",
+                request_id,
+                result_file_path,
+                total_time,
+                len(result_str),
+            )
 
             return result_str, result_file_path
 
         except Exception as e:
-            raise RuntimeError(f"Error transcribing file: {e}") from e
+            import traceback
+            error_msg = f"Error transcribing file: {str(e)}"
+            full_traceback = traceback.format_exc()
+            logger.error("[TRANSCRIBE %s ERROR] %s", request_id, error_msg)
+            logger.error("[TRANSCRIBE %s TRACEBACK] %s", request_id, full_traceback)
+            raise RuntimeError(f"Error transcribing file: {e}\n\nSee logs for details.") from e
 
     def transcribe_mic(self,
                        mic_audio: str,
@@ -366,7 +415,8 @@ class BaseTranscriptionPipeline(ABC):
             )
             progress(1, desc="Completed!")
 
-            file_name = "Mic"
+            model_slug = params.whisper.model_size.replace("/", "-").replace(" ", "-")
+            file_name = f"Mic-{model_slug}"
             subtitle, file_path = generate_file(
                 output_dir=self.output_dir,
                 output_file_name=file_name,
@@ -566,19 +616,19 @@ class BaseTranscriptionPipeline(ABC):
             language_code_dict = {value: key for key, value in whisper.tokenizer.LANGUAGES.items()}
             params.whisper.lang = language_code_dict[params.whisper.lang]
 
-        if params.whisper.initial_prompt == GRADIO_NONE_STR:
+        if params.whisper.initial_prompt == "":
             params.whisper.initial_prompt = None
-        if params.whisper.prefix == GRADIO_NONE_STR:
+        if params.whisper.prefix == "":
             params.whisper.prefix = None
-        if params.whisper.hotwords == GRADIO_NONE_STR:
+        if params.whisper.hotwords == "":
             params.whisper.hotwords = None
-        if params.whisper.max_new_tokens == GRADIO_NONE_NUMBER_MIN:
+        if params.whisper.max_new_tokens in (None, 0):
             params.whisper.max_new_tokens = None
-        if params.whisper.hallucination_silence_threshold == GRADIO_NONE_NUMBER_MIN:
+        if params.whisper.hallucination_silence_threshold is None:
             params.whisper.hallucination_silence_threshold = None
-        if params.whisper.language_detection_threshold == GRADIO_NONE_NUMBER_MIN:
+        if params.whisper.language_detection_threshold is None:
             params.whisper.language_detection_threshold = None
-        if params.vad.max_speech_duration_s == GRADIO_NONE_NUMBER_MAX:
+        if params.vad.max_speech_duration_s is None:
             params.vad.max_speech_duration_s = float('inf')
         return params
 
@@ -601,7 +651,7 @@ class BaseTranscriptionPipeline(ABC):
             cached_yaml["whisper"]["suppress_tokens"] = str(supress_token)
 
         if cached_yaml["whisper"].get("lang", None) is None:
-            cached_yaml["whisper"]["lang"] = AUTOMATIC_DETECTION.unwrap()
+            cached_yaml["whisper"]["lang"] = AUTOMATIC_DETECTION
         else:
             language_dict = whisper.tokenizer.LANGUAGES
             cached_yaml["whisper"]["lang"] = language_dict[cached_yaml["whisper"]["lang"]]

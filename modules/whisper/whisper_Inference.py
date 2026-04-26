@@ -59,9 +59,6 @@ class WhisperInference(BaseTranscriptionPipeline):
         if params.model_size != self.current_model_size or self.model is None or self.current_compute_type != params.compute_type:
             self.update_model(params.model_size, params.compute_type, progress)
 
-        def progress_callback(progress_value):
-            progress(progress_value, desc="Transcribing..")
-
         result = self.model.transcribe(audio=audio,
                                        language=params.lang,
                                        verbose=False,
@@ -73,8 +70,7 @@ class WhisperInference(BaseTranscriptionPipeline):
                                        best_of=params.best_of,
                                        patience=params.patience,
                                        temperature=params.temperature,
-                                       compression_ratio_threshold=params.compression_ratio_threshold,
-                                       progress_callback=progress_callback,)["segments"]
+                                       compression_ratio_threshold=params.compression_ratio_threshold)["segments"]
         segments_result = []
         for segment in result:
             segments_result.append(Segment(

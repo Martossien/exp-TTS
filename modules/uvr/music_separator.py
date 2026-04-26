@@ -1,6 +1,5 @@
 from typing import Optional, Union, List, Dict
 import numpy as np
-import torchaudio
 import soundfile as sf
 import os
 import torch
@@ -105,8 +104,8 @@ class MusicSeparator:
                 audio = load_audio(audio)
                 sample_rate = 16000
             else:
-                self.audio_info = torchaudio.info(audio)
-                sample_rate = self.audio_info.sample_rate
+                self.audio_info = sf.info(audio)
+                sample_rate = self.audio_info.samplerate
         else:
             timestamp = datetime.now().strftime("%m%d%H%M%S")
             output_filename, ext = f"UVR-{timestamp}", ".wav"
