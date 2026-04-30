@@ -21,6 +21,7 @@ bonnes pratiques du projet d'origine.
 ### Modèles de transcription additionnels
 - **[Cohere ASR](https://huggingface.co/CohereLabs/cohere-transcribe-03-2026)** — modèle 2B, 14 langues
 - **[Qwen3-ASR](https://github.com/QwenLM/Qwen3-ASR)** — modèle 1.7B, 52 langues
+- **[Voxtral Realtime vLLM](https://huggingface.co/mistralai/Voxtral-Mini-4B-Realtime-2602)** — modèle 4B, 12 langues, via serveur vLLM externe (HTTP)
 
 ### Transcription multi-modèles
 - Onglet **Multi-Model** : lance 2 à 4 modèles ASR séquentiellement sur le même audio
