@@ -18,6 +18,7 @@ class WhisperImpl(Enum):
     VOXTRAL_MINI = "voxtral-mini"
     QWEN3_ASR = "qwen3-asr"
     COHERE_ASR = "cohere-asr"
+    VOXTRAL_REALTIME_VLLM = "voxtral-realtime-vllm"
 
 
 class Segment(BaseModel):

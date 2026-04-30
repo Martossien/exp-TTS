@@ -45,7 +45,7 @@ os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
 from modules.utils.paths import (
     FASTER_WHISPER_MODELS_DIR, DIARIZATION_MODELS_DIR, OUTPUT_DIR,
     VOXTRAL_MODELS_DIR, QWEN3_ASR_MODELS_DIR, COHERE_ASR_MODELS_DIR,
-    UVR_MODELS_DIR,
+    VOXTRAL_REALTIME_MODELS_DIR, UVR_MODELS_DIR,
 )
 from modules.whisper.data_classes import (
     WhisperParams, VadParams, DiarizationParams, WhisperImpl, Segment,
@@ -63,6 +63,7 @@ ALL_MODELS = [
     "cohere-transcribe-03-2026",
     "qwen3-asr-1.7b",
     "voxtral-mini-3b",
+    "voxtral-realtime-vllm",
 ]
 
 # Language name → ISO 639-1 code (Faster-Whisper requires ISO codes)
@@ -108,6 +109,7 @@ MODEL_TO_WHISPER_TYPE = {
     "cohere-transcribe-03-2026":  WhisperImpl.COHERE_ASR.value,
     "qwen3-asr-1.7b":             WhisperImpl.QWEN3_ASR.value,
     "voxtral-mini-3b":            WhisperImpl.VOXTRAL_MINI.value,
+    "voxtral-realtime-vllm":      WhisperImpl.VOXTRAL_REALTIME_VLLM.value,
 }
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -228,7 +230,7 @@ def run_model(
     # With stride=25s and window=30s, LCM(25,30)=150s → bucket collision every 150s
     # (two consecutive chunks share the same 30s bucket, doubling its content).
     # Force chunk_overlap=0 → stride=chunk_length=window=30s → no collision possible.
-    _CHUNK_MODELS = {WhisperImpl.COHERE_ASR.value, WhisperImpl.QWEN3_ASR.value, WhisperImpl.VOXTRAL_MINI.value}
+    _CHUNK_MODELS = {WhisperImpl.COHERE_ASR.value, WhisperImpl.QWEN3_ASR.value, WhisperImpl.VOXTRAL_MINI.value, WhisperImpl.VOXTRAL_REALTIME_VLLM.value}
     if whisper_type in _CHUNK_MODELS:
         chunk_overlap = 0
 
@@ -240,6 +242,7 @@ def run_model(
         voxtral_model_dir=VOXTRAL_MODELS_DIR,
         qwen3_asr_model_dir=QWEN3_ASR_MODELS_DIR,
         cohere_asr_model_dir=COHERE_ASR_MODELS_DIR,
+        voxtral_realtime_model_dir=VOXTRAL_REALTIME_MODELS_DIR,
         diarization_model_dir=DIARIZATION_MODELS_DIR,
         uvr_model_dir=UVR_MODELS_DIR,
         output_dir=OUTPUT_DIR,

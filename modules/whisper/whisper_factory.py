@@ -4,13 +4,15 @@ import torch
 
 from modules.utils.paths import (FASTER_WHISPER_MODELS_DIR, DIARIZATION_MODELS_DIR, OUTPUT_DIR,
                                  INSANELY_FAST_WHISPER_MODELS_DIR, WHISPER_MODELS_DIR, UVR_MODELS_DIR,
-                                 VOXTRAL_MODELS_DIR, QWEN3_ASR_MODELS_DIR, COHERE_ASR_MODELS_DIR)
+                                 VOXTRAL_MODELS_DIR, QWEN3_ASR_MODELS_DIR, COHERE_ASR_MODELS_DIR,
+                                 VOXTRAL_REALTIME_MODELS_DIR)
 from modules.whisper.faster_whisper_inference import FasterWhisperInference
 from modules.whisper.whisper_Inference import WhisperInference
 from modules.whisper.insanely_fast_whisper_inference import InsanelyFastWhisperInference
 from modules.whisper.voxtral_whisper_inference import VoxtralWhisperInference
 from modules.whisper.qwen3_asr_inference import Qwen3ASRInference
 from modules.whisper.cohere_asr_inference import CohereASRInference
+from modules.whisper.voxtral_realtime_vllm_inference import VoxtralRealtimeVLLMInference
 from modules.whisper.base_transcription_pipeline import BaseTranscriptionPipeline
 from modules.whisper.data_classes import *
 from modules.utils.logger import get_logger
@@ -118,6 +120,17 @@ class WhisperFactory:
         return installed_models
 
     @staticmethod
+    def _installed_voxtral_realtime_vllm_models() -> list[str]:
+        host = os.environ.get("VOXTRAL_VLLM_HOST", "localhost")
+        port = int(os.environ.get("VOXTRAL_VLLM_PORT", "8000"))
+        try:
+            import urllib.request
+            urllib.request.urlopen(f"http://{host}:{port}/health", timeout=2)
+            return ["voxtral-realtime-vllm"]
+        except Exception:
+            return []
+
+    @staticmethod
     def get_combined_available_models(whisper_type: Optional[str] = None):
         """
         Get installed models for a specific whisper implementation or all implementations.
@@ -141,6 +154,7 @@ class WhisperFactory:
             combined_models.extend(WhisperFactory._installed_voxtral_models())
             combined_models.extend(WhisperFactory._installed_qwen3_asr_models())
             combined_models.extend(WhisperFactory._installed_cohere_asr_models())
+            combined_models.extend(WhisperFactory._installed_voxtral_realtime_vllm_models())
             
             # Remove duplicates while preserving order
             seen = set()
@@ -159,6 +173,8 @@ class WhisperFactory:
             return WhisperFactory._installed_qwen3_asr_models()
         elif whisper_type == WhisperImpl.COHERE_ASR.value:
             return WhisperFactory._installed_cohere_asr_models()
+        elif whisper_type == WhisperImpl.VOXTRAL_REALTIME_VLLM.value:
+            return WhisperFactory._installed_voxtral_realtime_vllm_models()
         elif whisper_type in [WhisperImpl.FASTER_WHISPER.value, WhisperImpl.WHISPER.value, WhisperImpl.INSANELY_FAST_WHISPER.value]:
             return WhisperFactory._installed_faster_whisper_models()
         else:
@@ -173,6 +189,7 @@ class WhisperFactory:
         voxtral_model_dir: str = VOXTRAL_MODELS_DIR,
         qwen3_asr_model_dir: str = QWEN3_ASR_MODELS_DIR,
         cohere_asr_model_dir: str = COHERE_ASR_MODELS_DIR,
+        voxtral_realtime_model_dir: str = VOXTRAL_REALTIME_MODELS_DIR,
         diarization_model_dir: str = DIARIZATION_MODELS_DIR,
         uvr_model_dir: str = UVR_MODELS_DIR,
         output_dir: str = OUTPUT_DIR,
@@ -189,6 +206,7 @@ class WhisperFactory:
             - "insanely-fast-whisper": https://github.com/Vaibhavs10/insanely-fast-whisper
             - "voxtral-mini": https://huggingface.co/mistralai/Voxtral-Mini-3B-2507
             - "qwen3-asr": https://github.com/QwenLM/Qwen3-ASR
+            - "voxtral-realtime-vllm": requires external vLLM process on port 8000
         whisper_model_dir : str
             Directory path for the Whisper model.
         faster_whisper_model_dir : str
@@ -312,6 +330,14 @@ class WhisperFactory:
                     diarization_model_dir=diarization_model_dir,
                     uvr_model_dir=uvr_model_dir
                 )
+        elif whisper_type == WhisperImpl.VOXTRAL_REALTIME_VLLM.value:
+            logger.info("[FACTORY] Returning VoxtralRealtimeVLLMInference")
+            return VoxtralRealtimeVLLMInference(
+                model_dir=voxtral_realtime_model_dir,
+                output_dir=output_dir,
+                diarization_model_dir=diarization_model_dir,
+                uvr_model_dir=uvr_model_dir,
+            )
         else:
             logger.warning(
                 "[FACTORY] FALLBACK: Unknown whisper_type='%s'. "

@@ -250,12 +250,14 @@ class App:
             return WhisperImpl.QWEN3_ASR.value
         if model_size.startswith("cohere") or model_size.startswith("CohereLabs"):
             return WhisperImpl.COHERE_ASR.value
+        if model_size == "voxtral-realtime-vllm":
+            return WhisperImpl.VOXTRAL_REALTIME_VLLM.value
         if model_size not in ("large-v3", "large-v3-turbo"):
             logger.warning(
                 "[WEBUI] FALLBACK: Unknown model_size='%s', routing to faster-whisper. "
                 "If this is unexpected, check the model name.", model_size
             )
-        return WhisperImpl.FASTER_WHISPER.value
+            return WhisperImpl.FASTER_WHISPER.value
 
     def get_whisper_inference_for_pipeline(self, pipeline_params):
         model_size = pipeline_params[0] if pipeline_params else self.default_params["whisper"]["model_size"]
