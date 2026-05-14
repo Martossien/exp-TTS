@@ -40,7 +40,11 @@ class App:
     def __init__(self, args):
         import json as _json
         self.args = args
-        self.app = gr.Blocks(css=CSS, theme=self.args.theme, delete_cache=(3600, 86400))
+        self._gradio_major = int(gr.__version__.split('.')[0])
+        if self._gradio_major >= 6:
+            self.app = gr.Blocks(delete_cache=(3600, 86400))
+        else:
+            self.app = gr.Blocks(css=CSS, theme=self.args.theme, delete_cache=(3600, 86400))
         self.whisper_infs = {}
         self.whisper_inf = self.get_whisper_inference(self.args.whisper_type)
         self.nllb_inf = NLLBInference(
@@ -252,12 +256,13 @@ class App:
             return WhisperImpl.COHERE_ASR.value
         if model_size == "voxtral-realtime-vllm":
             return WhisperImpl.VOXTRAL_REALTIME_VLLM.value
-        if model_size not in ("large-v3", "large-v3-turbo"):
-            logger.warning(
-                "[WEBUI] FALLBACK: Unknown model_size='%s', routing to faster-whisper. "
-                "If this is unexpected, check the model name.", model_size
-            )
+        if model_size in ("large-v3", "large-v3-turbo"):
             return WhisperImpl.FASTER_WHISPER.value
+        logger.warning(
+            "[WEBUI] FALLBACK: Unknown model_size='%s', routing to faster-whisper. "
+            "If this is unexpected, check the model name.", model_size
+        )
+        return WhisperImpl.FASTER_WHISPER.value
 
     def get_whisper_inference_for_pipeline(self, pipeline_params):
         model_size = pipeline_params[0] if pipeline_params else self.default_params["whisper"]["model_size"]
@@ -405,8 +410,10 @@ class App:
 
                 with gr.TabItem("Mic"):  # tab3
                     with gr.Row():
-                        mic_input = gr.Microphone(label="Record with Mic", type="filepath", interactive=True,
-                                                  show_download_button=True)
+                        _mic_kwargs = dict(label="Record with Mic", type="filepath", interactive=True)
+                        if self._gradio_major < 6:
+                            _mic_kwargs["show_download_button"] = True
+                        mic_input = gr.Microphone(**_mic_kwargs)
 
                     pipeline_params, dd_file_format, cb_timestamp = self.create_pipeline_inputs()
 
@@ -848,7 +855,7 @@ class App:
         logger.info("Gradio allowed paths: %s", allowed_paths)
         self.app.queue()
 
-        self.app.launch(
+        _launch_kwargs = dict(
             share=args.share,
             server_name=args.server_name,
             server_port=args.server_port,
@@ -859,6 +866,10 @@ class App:
             allowed_paths=allowed_paths,
             show_error=True,
         )
+        if self._gradio_major >= 6:
+            _launch_kwargs["css"] = CSS
+            _launch_kwargs["theme"] = args.theme
+        self.app.launch(**_launch_kwargs)
 
     @staticmethod
     def open_folder(folder_path: str):

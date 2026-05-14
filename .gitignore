@@ -40,6 +40,12 @@ __pycache__/
 **/venv/
 .venv/
 
+# ── Conda / environment-specific ────────────────────
+requirements_conda.txt
+install_conda.sh
+
+# ── Reports / docs (local only, outside repo) ──────
+
 # ── Backups / Temp / Divers ────────────────────────
 *.backup
 *.bak

@@ -24,13 +24,19 @@ if [ -f "$SCRIPT_DIR/pids/voxtral.pid" ]; then
     fi
 fi
 
-# Select the Python runtime explicitly. This deployment uses pyenv's
-# voxtral-env rather than a repository-local venv.
-if [ -d "venv" ]; then
-    source venv/bin/activate
+# Select the Python runtime explicitly.
+# Set CONDA_ENV or VENV_NAME to override the default environment name.
+CONDA_ENV="${CONDA_ENV:-exp-stt}"
+VENV_NAME="${VENV_NAME:-venv}"
+if [ -d "$VENV_NAME" ]; then
+    source "$VENV_NAME/bin/activate"
     PYTHON_BIN="python"
 elif [ -d ".venv" ]; then
     source .venv/bin/activate
+    PYTHON_BIN="python"
+elif command -v conda &>/dev/null; then
+    eval "$(conda shell.bash hook)"
+    conda activate "$CONDA_ENV"
     PYTHON_BIN="python"
 elif command -v pyenv &>/dev/null && PYENV_PYTHON=$(pyenv which python 2>/dev/null); then
     PYTHON_BIN="$PYENV_PYTHON"
@@ -85,10 +91,10 @@ fi
 export PYTORCH_CUDA_ALLOC_CONF="${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}"
 echo "Using PYTORCH_CUDA_ALLOC_CONF=$PYTORCH_CUDA_ALLOC_CONF"
 
-# Default to offline Hugging Face cache usage. Models should be downloaded
-# explicitly; runtime inference must not depend on network metadata checks.
-export HF_HUB_OFFLINE="${HF_HUB_OFFLINE:-1}"
-export TRANSFORMERS_OFFLINE="${TRANSFORMERS_OFFLINE:-1}"
+# Default to online Hugging Face access so models can be downloaded on first run.
+# Set HF_HUB_OFFLINE=1 to prevent any network access (requires pre-downloaded models).
+export HF_HUB_OFFLINE="${HF_HUB_OFFLINE:-0}"
+export TRANSFORMERS_OFFLINE="${TRANSFORMERS_OFFLINE:-0}"
 echo "Using HF_HUB_OFFLINE=$HF_HUB_OFFLINE TRANSFORMERS_OFFLINE=$TRANSFORMERS_OFFLINE"
 
 # Log VRAM state before launch so we know what's available.

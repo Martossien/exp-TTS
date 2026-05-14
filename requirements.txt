@@ -1,3 +1,20 @@
+# ============================================================
+# exp-STT — requirements.txt
+# ============================================================
+# This file lists the Python dependencies for the project.
+#
+# Key version constraints (apply to ALL environments):
+#   - transformers must stay <= 4.57.x (5.x breaks Cohere ASR routing)
+#   - pyannote.audio >= 4.0 is required for community-1 model
+#     (3.3.2 below works on older torchaudio, but fresh installs
+#      should use >=4.0.0 — see install_env.sh)
+#   - qwen-asr must be installed separately (pip install qwen-asr)
+#   - setuptools < 81 is required for jhj0517-whisper (pkg_resources)
+#
+# For CUDA 13+ (RTX 3090 with CUDA 13, etc.), use install_env.sh
+# which handles torch version selection automatically.
+# ============================================================
+
 --extra-index-url https://download.pytorch.org/whl/cu126
 
 # Update above --extra-index-url according to your device.
@@ -5,6 +22,7 @@
 ## Nvidia GPU
 # CUDA 12.6 : https://download.pytorch.org/whl/cu126
 # CUDA 12.8 : https://download.pytorch.org/whl/cu128
+# CUDA 13.0 : use install_env.sh (torch 2.12+cu130 via uvr dep)
 
 ## Intel GPU
 # https://download.pytorch.org/whl/xpu
@@ -15,7 +33,12 @@ torchaudio
 git+https://github.com/jhj0517/jhj0517-whisper.git
 faster-whisper==1.1.1
 accelerate
+
+# CRITICAL: transformers must NOT upgrade to 5.x (breaks Cohere ASR)
+# The git URL below installs the latest 4.x which is OK.
+# For reproducible installs, pin: transformers==4.57.6
 git+https://github.com/huggingface/transformers.git
+
 mistral-common[audio]
 librosa
 soundfile
@@ -23,8 +46,16 @@ jiwer
 gradio
 pytubefix
 ruamel.yaml==0.18.6
+
+# BUG FIX: pyannote.audio 3.3.2 is incompatible with torchaudio >= 2.11.
+# For fresh installs, use >=4.0.0 instead of 3.3.2.
+# 3.3.2 is kept here for backward compat with existing venvs.
 pyannote.audio==3.3.2
+
 git+https://github.com/jhj0517/ultimatevocalremover_api.git
-git+https://github.com/jhj0517/pyrubberband.git
+git+https://github.com/jhj0511/pyrubberband.git
 matplotlib
 sentencepiece
+
+# Additional package (not listed above, install separately):
+# qwen-asr    — for Qwen3-ASR model support (pip install qwen-asr)

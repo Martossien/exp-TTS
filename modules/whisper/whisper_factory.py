@@ -93,11 +93,26 @@ class WhisperFactory:
             and WhisperFactory._has_weight_file(model_dir)
         ):
             return [model_name]
+        repo_id = "mistralai/Voxtral-Mini-3B-2507"
+        snapshot_dir = WhisperFactory._hf_snapshot_dir(
+            os.path.join(os.path.expanduser("~"), ".cache", "huggingface", "hub"),
+            repo_id,
+        )
+        if snapshot_dir and WhisperFactory._has_required_files(
+            snapshot_dir, ("config.json", "preprocessor_config.json")
+        ) and WhisperFactory._has_weight_file(snapshot_dir):
+            return [model_name]
+        snapshot_dir_local = WhisperFactory._hf_snapshot_dir(VOXTRAL_MODELS_DIR, repo_id)
+        if snapshot_dir_local and WhisperFactory._has_required_files(
+            snapshot_dir_local, ("config.json", "preprocessor_config.json")
+        ) and WhisperFactory._has_weight_file(snapshot_dir_local):
+            return [model_name]
         return []
 
     @staticmethod
     def _installed_qwen3_asr_models() -> list[str]:
         installed_models = []
+        hf_cache_dir = os.path.join(os.path.expanduser("~"), ".cache", "huggingface", "hub")
         for model_name in Qwen3ASRInference.available_models:
             model_dir = os.path.join(QWEN3_ASR_MODELS_DIR, model_name)
             if (
@@ -105,17 +120,44 @@ class WhisperFactory:
                 and WhisperFactory._has_weight_file(model_dir)
             ):
                 installed_models.append(model_name)
+                continue
+            repo_id = Qwen3ASRInference.available_models[model_name]
+            snapshot_dir = WhisperFactory._hf_snapshot_dir(hf_cache_dir, repo_id)
+            if snapshot_dir and WhisperFactory._has_required_files(
+                snapshot_dir, ("config.json", "preprocessor_config.json")
+            ) and WhisperFactory._has_weight_file(snapshot_dir):
+                installed_models.append(model_name)
+                continue
+            snapshot_dir_local = WhisperFactory._hf_snapshot_dir(QWEN3_ASR_MODELS_DIR, repo_id)
+            if snapshot_dir_local and WhisperFactory._has_required_files(
+                snapshot_dir_local, ("config.json", "preprocessor_config.json")
+            ) and WhisperFactory._has_weight_file(snapshot_dir_local):
+                installed_models.append(model_name)
         return installed_models
 
     @staticmethod
     def _installed_cohere_asr_models() -> list[str]:
         installed_models = []
+        hf_cache_dir = os.path.join(os.path.expanduser("~"), ".cache", "huggingface", "hub")
         for model_name in CohereASRInference.available_models:
             model_dir = os.path.join(COHERE_ASR_MODELS_DIR, model_name)
             if (
                 WhisperFactory._has_required_files(model_dir, ("config.json",))
                 and WhisperFactory._has_weight_file(model_dir)
             ):
+                installed_models.append(model_name)
+                continue
+            repo_id = CohereASRInference.available_models[model_name]
+            snapshot_dir = WhisperFactory._hf_snapshot_dir(hf_cache_dir, repo_id)
+            if snapshot_dir and WhisperFactory._has_required_files(
+                snapshot_dir, ("config.json",)
+            ) and WhisperFactory._has_weight_file(snapshot_dir):
+                installed_models.append(model_name)
+                continue
+            snapshot_dir_local = WhisperFactory._hf_snapshot_dir(COHERE_ASR_MODELS_DIR, repo_id)
+            if snapshot_dir_local and WhisperFactory._has_required_files(
+                snapshot_dir_local, ("config.json",)
+            ) and WhisperFactory._has_weight_file(snapshot_dir_local):
                 installed_models.append(model_name)
         return installed_models
 
